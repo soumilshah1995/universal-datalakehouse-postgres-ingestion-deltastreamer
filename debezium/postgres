@@ -1,0 +1,14 @@
+name=PostgresConnector
+connector.class=io.debezium.connector.postgresql.PostgresConnector
+tasks.max=1name=PostgresConnector
+connector.class=io.debezium.connector.postgresql.PostgresConnector
+database.user=hive
+database.dbname=metastore
+tasks.max=1
+database.hostname=metastore_db
+database.password=hive
+database.server.name=hive
+table.include.list=public.sales
+database.port=5432
+plugin.name=pgoutput
+tombstones.on.delete=false

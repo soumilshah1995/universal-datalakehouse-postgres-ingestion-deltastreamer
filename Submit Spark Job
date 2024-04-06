@@ -1,0 +1,77 @@
+
+========================================================
+With OneTable
+========================================================
+DELETE FROM public.sales
+WHERE salesid = 1;
+
+
+========================================================
+With METADATA AND INDEX
+========================================================
+spark-submit \
+    --class org.apache.hudi.utilities.streamer.HoodieStreamer \
+    --packages 'org.apache.hudi:hudi-spark3.4-bundle_2.12:0.14.0,org.apache.hadoop:hadoop-aws:3.3.2' \
+    --properties-file spark-config.properties \
+    --master 'local[*]' \
+    --executor-memory 1g \
+    --jars /Users/soumilshah/IdeaProjects/SparkProject/DeltaStreamer/jar/hudi-extensions-0.1.0-SNAPSHOT-bundled.jar,/Users/soumilshah/IdeaProjects/SparkProject/DeltaStreamer/jar/hudi-java-client-0.14.0.jar \
+     /Users/soumilshah/IdeaProjects/SparkProject/DeltaStreamer/jar/hudi-utilities-slim-bundle_2.12-0.14.0.jar \
+    --table-type COPY_ON_WRITE \
+    --target-base-path 's3a://warehouse/database=default/table_name=sales'  \
+    --target-table sales \
+    --op UPSERT \
+    --enable-sync \
+    --enable-hive-sync \
+    --sync-tool-classes 'io.onetable.hudi.sync.OneTableSyncTool' \
+    --source-limit 4000000 \
+    --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+    --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+    --min-sync-interval-seconds 10 \
+    --continuous \
+    --source-ordering-field _event_origin_ts_ms \
+    --hoodie-conf bootstrap.servers=localhost:7092 \
+    --hoodie-conf schema.registry.url=http://localhost:8081 \
+    --hoodie-conf hoodie.deltastreamer.schemaprovider.registry.url=http://localhost:8081/subjects/hive.public.sales-value/versions/latest \
+    --hoodie-conf hoodie.deltastreamer.source.kafka.value.deserializer.class=io.confluent.kafka.serializers.KafkaAvroDeserializer \
+    --hoodie-conf hoodie.deltastreamer.source.kafka.topic=hive.public.sales \
+    --hoodie-conf auto.offset.reset=earliest \
+    --hoodie-conf hoodie.datasource.write.recordkey.field=salesid \
+    --hoodie-conf 'hoodie.datasource.write.partitionpath.field=' \
+    --hoodie-conf hoodie.datasource.write.precombine.field=_event_origin_ts_ms \
+    --hoodie-conf 'hoodie.onetable.formats.to.sync=DELTA,ICEBERG' \
+    --hoodie-conf 'hoodie.onetable.target.metadata.retention.hr=168' \
+    --hoodie-conf 'hoodie.metadata.index.async=true' \
+    --hoodie-conf 'hoodie.metadata.enable=true' \
+    --hoodie-conf 'hoodie.datasource.hive_sync.partition_extractor_class=org.apache.hudi.hive.MultiPartKeysValueExtractor' \
+    --hoodie-conf 'hoodie.datasource.hive_sync.metastore.uris=thrift://localhost:9083' \
+    --hoodie-conf 'hoodie.datasource.hive_sync.mode=hms' \
+    --hoodie-conf 'hoodie.datasource.hive_sync.enable=true' \
+    --hoodie-conf 'hoodie.datasource.hive_sync.database=default' \
+    --hoodie-conf 'hoodie.datasource.hive_sync.table=sales' \
+    --hoodie-conf 'hoodie.datasource.write.hive_style_partitioning=true'
+
+
+# =========================================
+DELTA TABLES
+# =========================================
+
+spark-sql \
+--packages 'io.delta:delta-core_2.12:2.4.0,org.apache.hadoop:hadoop-aws:3.3.2' \
+--conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
+--conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
+--conf "spark.hadoop.fs.s3a.access.key=admin" \
+--conf "spark.hadoop.fs.s3a.secret.key=password" \
+--conf "spark.hadoop.fs.s3a.endpoint=http://127.0.0.1:9000" \
+--conf "spark.hadoop.fs.s3a.path.style.access=true" \
+--conf "fs.s3a.signing-algorithm=S3SignerType" \
+--conf "spark.sql.catalogImplementation=hive" \
+--conf "spark.hadoop.hive.metastore.uris=thrift://localhost:9083"
+
+CREATE SCHEMA delta_db LOCATION 's3a://warehouse/';
+
+-- Use the delta_db database
+USE delta_db;
+
+
+CREATE TABLE delta_db.delta_sales USING DELTA LOCATION 's3a://warehouse/database=default/table_name=sales';

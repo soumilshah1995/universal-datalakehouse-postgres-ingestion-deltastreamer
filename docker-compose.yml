@@ -1,0 +1,122 @@
+version: "3"
+
+services:
+  fast-data-dev:
+    image: dougdonohoe/fast-data-dev
+    ports:
+      - "3181:3181"
+      - "3040:3040"
+      - "7081:7081"
+      - "7082:7082"
+      - "7083:7083"
+      - "7092:7092"
+      - "8081:8081"
+    environment:
+      - ZK_PORT=3181
+      - WEB_PORT=3040
+      - REGISTRY_PORT=8081
+      - REST_PORT=7082
+      - CONNECT_PORT=7083
+      - BROKER_PORT=7092
+      - ADV_HOST=127.0.0.1
+
+  trino-coordinator:
+    image: 'trinodb/trino:latest'
+    hostname: trino-coordinator
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./trino/etc:/etc/trino
+
+  metastore_db:
+    image: postgres:11
+    hostname: metastore_db
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    command: ["postgres", "-c", "wal_level=logical"]
+    healthcheck:
+      test: ["CMD", "psql", "-U", "hive", "-c", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./postgresscripts:/docker-entrypoint-initdb.d
+
+  hive-metastore:
+    hostname: hive-metastore
+    image: 'starburstdata/hive:3.1.2-e.18'
+    ports:
+      - '9083:9083' # Metastore Thrift
+    environment:
+      HIVE_METASTORE_DRIVER: org.postgresql.Driver
+      HIVE_METASTORE_JDBC_URL: jdbc:postgresql://metastore_db:5432/metastore
+      HIVE_METASTORE_USER: hive
+      HIVE_METASTORE_PASSWORD: hive
+      HIVE_METASTORE_WAREHOUSE_DIR: s3://datalake/
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: admin
+      S3_SECRET_KEY: password
+      S3_PATH_STYLE_ACCESS: "true"
+      REGION: ""
+      GOOGLE_CLOUD_KEY_FILE_PATH: ""
+      AZURE_ADL_CLIENT_ID: ""
+      AZURE_ADL_CREDENTIAL: ""
+      AZURE_ADL_REFRESH_URL: ""
+      AZURE_ABFS_STORAGE_ACCOUNT: ""
+      AZURE_ABFS_ACCESS_KEY: ""
+      AZURE_WASB_STORAGE_ACCOUNT: ""
+      AZURE_ABFS_OAUTH: ""
+      AZURE_ABFS_OAUTH_TOKEN_PROVIDER: ""
+      AZURE_ABFS_OAUTH_CLIENT_ID: ""
+      AZURE_ABFS_OAUTH_SECRET: ""
+      AZURE_ABFS_OAUTH_ENDPOINT: ""
+      AZURE_WASB_ACCESS_KEY: ""
+      HIVE_METASTORE_USERS_IN_ADMIN_ROLE: "admin"
+    depends_on:
+      - metastore_db
+    healthcheck:
+      test: bash -c "exec 6<> /dev/tcp/localhost/9083"
+
+  minio:
+    image: minio/minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DOMAIN=minio
+    networks:
+      default:
+        aliases:
+          - warehouse.minio
+    ports:
+      - 9001:9001
+      - 9000:9000
+    command: ["server", "/data", "--console-address", ":9001"]
+
+  mc:
+    depends_on:
+      - minio
+    image: minio/mc
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc rm -r --force minio/warehouse;
+      /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc policy set public minio/warehouse;
+      tail -f /dev/null
+      "
+
+
+volumes:
+  hive-metastore-postgresql:
+
+networks:
+  default:
+    name: hudi
