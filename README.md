@@ -8,3 +8,9 @@ universal-datalakehouse-postgres-ingestion-deltastreamer
 ```
 https://drive.google.com/drive/folders/1mCxcapOPbt0TujYZEyBYEz7vnzqmWoxW?usp=share_link
 ```
+
+# Video
+* https://www.youtube.com/watch?time_continue=1423&v=8buCo_JlJFg
+
+## Step by Step Explnation 
+* https://www.linkedin.com/pulse/real-time-universal-datalakehouse-harnessing-debezium-soumil-shah-ickoe/?trackingId=u8Nf4fixTlyU1ds%2FREYAFw%3D%3D
